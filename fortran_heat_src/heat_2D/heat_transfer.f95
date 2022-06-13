@@ -1,6 +1,7 @@
 Module heat_transfer
 
   use settings, only : run_settings
+  use mpi
 
 IMPLICIT NONE
 
@@ -79,7 +80,50 @@ SUBROUTINE exchange(local_settings, local_data)
    TYPE(run_settings), intent(IN)    :: local_settings
    TYPE(data_object), intent(INOUT)  :: local_data
 
+   !mpi datatypes are integers in fortran?
+   integer :: ierr, mpi_vector, tag
+   !TYPE(MPI_Status) :: mystatus
+
+
+   ! do I want x lots of y or y lots of x??
+   call MPI_Type_vector(local_settings%ndx+2, 1, local_settings%ndy + 2, MPI_REAL8, mpi_vector, ierr)
+   call MPI_Type_commit(mpi_vector, ierr)
+
+    !Exchange ghost cells, in the order left-right-up-down
+
+    ! send to left + receive from right
+    tag = 1
+!    if (local_settings% rank_left .ge. 0) THEN
+!    {
+!        write(0,*) "Rank " , local_settings%rank << " send left to rank "
+!        //          << m_s.rank_left << std::endl;
+!        MPI_Send(m_TCurrent[0] + 1, 1, tColumnVector, m_s.rank_left, tag, comm);
+!    }
+!    if (m_s.rank_right >= 0)
+!    {
+!        // std::cout << "Rank " << m_s.rank << " receive from right from rank "
+!        //          << m_s.rank_right << std::endl;
+!        MPI_Recv(m_TCurrent[0] + (m_s.ndy + 1), 1, tColumnVector,
+!                 m_s.rank_right, tag, comm, &status);
+!    }
+!
+!    // send to right + receive from left
+!    tag = 2;
+!    if (m_s.rank_right >= 0)
+!    {
+!        // std::cout << "Rank " << m_s.rank << " send right to rank "
+!        //          << m_s.rank_right << std::endl;
+!        MPI_Send(m_TCurrent[0] + m_s.ndy, 1, tColumnVector, m_s.rank_right, tag,
+!                 comm);
+!    }
+
+
+   ! Cleanup the custom column vector type
+    call MPI_Type_free(mpi_vector, ierr)
+
+
 END SUBROUTINE exchange
+
 
 End Module heat_transfer
 
