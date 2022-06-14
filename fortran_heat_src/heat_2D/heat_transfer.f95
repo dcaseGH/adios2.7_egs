@@ -5,9 +5,9 @@ Module heat_transfer
 
 IMPLICIT NONE
 
-PRIVATE !data_object
+PRIVATE
 
-PUBLIC data_object, apply_diffusion, initialise, exchange
+PUBLIC data_object, apply_diffusion, initialise, exchange, apply_heat
 
 TYPE data_object
   double precision, Allocatable, Dimension(:,:) :: Temp, temp_Temp
@@ -59,14 +59,15 @@ SUBROUTINE initialise(local_settings, local_data)
    local_data%temp      = 0.
    local_data%temp_Temp = 0.
 
-   hx = 2.0 * 4.0 * atan(1.0) / local_settings%ngdx
-   hy = 2.0 * 4.0 * atan(1.0) / local_settings%ngdy
+   hx = 2.0 * 4.0 * atan(1.0) / local_settings%gndx
+   hy = 2.0 * 4.0 * atan(1.0) / local_settings%gndy
+   !write(0,*) 'Debug', local_settings%posy, shape(local_data%Temp), local_settings%ndx, local_settings%ndy
 
-   do j=local_settings%ndy * local_settings%npy, local_settings%ndy * (local_settings%npy + 1) + 1
-      y = 0.0 + hy * (j - 1);
-      do i=local_settings%ndx * local_settings%npx, local_settings%ndx * (local_settings%npx + 1) + 1
-!      do i=0, local_settings%ndx + 1
-         x = 0. + hx * (i-1)
+   do j=0, local_settings%ndy + 1
+      y = 0.0 + hy * (j + local_settings%posy * local_settings%ndy - 1)
+
+      do i=0, local_settings%ndx + 1
+         x = 0. + hx * (i + local_settings%posx *local_settings%ndy - 1)
          local_data%Temp(i,j) = cos(8 * x) + cos(6 * x) - cos(4 * x) + cos(2 * x) &
                               - cos(x) + sin(8 * y) - sin(6 * y) + sin(4 * y) &
                               - sin(2 * y) + sin(y)
@@ -79,51 +80,89 @@ SUBROUTINE exchange(local_settings, local_data)
 
    TYPE(run_settings), intent(IN)    :: local_settings
    TYPE(data_object), intent(INOUT)  :: local_data
+   integer status(MPI_STATUS_SIZE)
 
    !mpi datatypes are integers in fortran?
    integer :: ierr, mpi_vector, tag
-   !TYPE(MPI_Status) :: mystatus
 
-
-   ! do I want x lots of y or y lots of x??
-   call MPI_Type_vector(local_settings%ndx+2, 1, local_settings%ndy + 2, MPI_REAL8, mpi_vector, ierr)
+   call MPI_Type_vector(local_settings%ndy+2, 1, local_settings%ndx + 2, MPI_DOUBLE_PRECISION, mpi_vector, ierr)
    call MPI_Type_commit(mpi_vector, ierr)
 
     !Exchange ghost cells, in the order left-right-up-down
 
     ! send to left + receive from right
     tag = 1
-!    if (local_settings% rank_left .ge. 0) THEN
-!    {
-!        write(0,*) "Rank " , local_settings%rank << " send left to rank "
-!        //          << m_s.rank_left << std::endl;
-!        MPI_Send(m_TCurrent[0] + 1, 1, tColumnVector, m_s.rank_left, tag, comm);
-!    }
-!    if (m_s.rank_right >= 0)
-!    {
-!        // std::cout << "Rank " << m_s.rank << " receive from right from rank "
-!        //          << m_s.rank_right << std::endl;
-!        MPI_Recv(m_TCurrent[0] + (m_s.ndy + 1), 1, tColumnVector,
-!                 m_s.rank_right, tag, comm, &status);
-!    }
-!
-!    // send to right + receive from left
-!    tag = 2;
-!    if (m_s.rank_right >= 0)
-!    {
-!        // std::cout << "Rank " << m_s.rank << " send right to rank "
-!        //          << m_s.rank_right << std::endl;
-!        MPI_Send(m_TCurrent[0] + m_s.ndy, 1, tColumnVector, m_s.rank_right, tag,
-!                 comm);
-!    }
+    if (local_settings% rank_left .ge. 0) THEN
+       call MPI_SEND( local_data%Temp(:,0), local_settings%ndx+2, MPI_DOUBLE_PRECISION, local_settings%rank_left, &
+                      tag, MPI_COMM_WORLD, ierr )
+    end if
+    if (local_settings%rank_right .ge. 0) THEN
+       call MPI_RECV(local_data%Temp(:,local_settings%ndy+1), local_settings%ndx+2 , MPI_DOUBLE_PRECISION, &
+                     local_settings%rank_right, &
+                     tag, MPI_COMM_WORLD, status, ierr )
+    end if
 
+    ! send to right + receive from left
+    tag = 2
+    if (local_settings%rank_right .ge. 0) THEN
+       call MPI_SEND( local_data%Temp(:,local_settings%ndy+1), local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
+                      local_settings%rank_right, &
+                      tag, MPI_COMM_WORLD, ierr )
+    end if
+    if (local_settings%rank_left .ge. 0) THEN
+      call MPI_Recv(local_data%Temp(:, 0), local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
+                     local_settings%rank_left, tag, MPI_COMM_WORLD, status, ierr)
+    end if
 
-   ! Cleanup the custom column vector type
-    call MPI_Type_free(mpi_vector, ierr)
+    !send down + receive from above
+    tag = 3
+    if (local_settings%rank_down .ge. 0) THEN
+       call MPI_SEND( local_data%Temp(0, :), local_settings%ndy+2, mpi_vector, &
+                      local_settings%rank_down, tag, MPI_COMM_WORLD, ierr)
+    end if
+    if (local_settings%rank_up .ge. 0) THEN
+       call MPI_Recv(local_data%Temp(local_settings%ndx+1, :), local_settings%ndy+2, mpi_vector, &
+                     local_settings%rank_up, tag, MPI_COMM_WORLD, status, ierr)
+    end if
+
+    !send up + receive from below
+    tag = 4
+    if (local_settings%rank_up .ge. 0) THEN
+       call MPI_SEND( local_data%Temp(local_settings%ndx+1, :), local_settings%ndy+2, mpi_vector, &
+                      local_settings%rank_up, tag, MPI_COMM_WORLD, ierr)
+    end if
+    if (local_settings%rank_down .ge. 0) THEN
+       call MPI_Recv(local_data%Temp(0, :), local_settings%ndy+2, mpi_vector, &
+                     local_settings%rank_down, tag, MPI_COMM_WORLD, status, ierr)
+    end if
+
+   call MPI_Type_free(mpi_vector, ierr)
 
 
 END SUBROUTINE exchange
 
+SUBROUTINE apply_heat(edge_temp, local_settings, local_data)
+
+   ! Apply heat to set edge_temp of the cells outside the interested zone
+
+   double precision, intent(in) :: edge_temp
+   TYPE(run_settings), intent(IN)    :: local_settings
+   TYPE(data_object), intent(INOUT)  :: local_data
+
+   if (local_settings%posx .eq. 0) THEN
+      local_data%Temp(0,:) = edge_temp
+   end if
+   if (local_settings%posx .eq. (local_settings%npx-1)) THEN
+      local_data%Temp(local_settings%npx-1,:) = edge_temp
+   end if
+   if (local_settings%posy .eq. 0) THEN
+      local_data%Temp(:,0) = edge_temp
+   end if
+   if (local_settings%posy .eq. (local_settings%npy-1)) THEN
+      local_data%Temp(:,local_settings%npy-1) = edge_temp
+   end if
+
+END SUBROUTINE apply_heat
 
 End Module heat_transfer
 

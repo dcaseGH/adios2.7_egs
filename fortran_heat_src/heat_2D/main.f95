@@ -6,7 +6,7 @@ program main
 
   use mpi
   use settings, only : run_settings!, define_local_settings
-  use heat_transfer, only : data_object, apply_diffusion, exchange, initialise
+  use heat_transfer, only : data_object, apply_diffusion, exchange, initialise, apply_heat
 
   implicit none
 
@@ -17,6 +17,8 @@ program main
 
   TYPE(run_settings) :: local_settings
   TYPE(data_object)  :: local_data
+  double precision   :: edge_temp
+
 
   call MPI_INIT(ierr)
   call MPI_COMM_RANK (MPI_COMM_WORLD, my_rank, ierr)
@@ -25,13 +27,14 @@ program main
   write(0,*) "Running with rank ", my_rank, " of ", num_ranks
   call local_settings%define_local_settings(my_rank)
 
-  write(0,*) "Global x and y distribution = ", local_settings%ngpx, " ", local_settings%ngpy
-  if (local_settings%ngpx * local_settings%ngpy .ne. num_ranks) then
+  call initialise(local_settings, local_data)
+  write(0,*) "x and y distribution = ", local_settings%npx, " ", local_settings%npy
+  if (local_settings%npx * local_settings%npy .ne. num_ranks) then
      stop 'pass arguments so that decomposition in x * y = number of ranks'
   end if
 
-  call initialise(local_settings, local_data)
 
+  edge_temp = 293.0 !set edges
   ! do more work and write more data
   do t = 1, local_settings%steps
 
@@ -39,11 +42,12 @@ program main
       ! increase this to do more work/comms per write
       do iter = 1, local_settings%iterations
 
-          call apply_diffusion(local_settings, local_data)
-
+         ! operator
+         call apply_diffusion(local_settings, local_data)
          ! mpi
          call exchange(local_settings, local_data)
          ! BC
+         call apply_heat(edge_temp, local_settings, local_data)
 
       end do !iter
 
