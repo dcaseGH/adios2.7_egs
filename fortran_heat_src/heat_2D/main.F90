@@ -5,6 +5,7 @@ program main
   !
 
   use mpi
+  use adios2
   use settings, only : run_settings!, define_local_settings
   use heat_transfer, only : data_object, apply_diffusion, exchange, initialise, apply_heat
 
@@ -15,10 +16,17 @@ program main
              t, iter, &
              num_args, i, itemp
 
+  ! stuff to run calc
   TYPE(run_settings) :: local_settings
   TYPE(data_object)  :: local_data
   double precision   :: edge_temp
 
+  !declare adios variables
+  type(adios2_adios) :: adios
+  type(adios2_io) :: ioPut, ioGet
+  type(adios2_variable) :: temperature, var_temperatures
+  type(adios2_engine) :: bpWriter, hdf5Writer!, hdf5Reader !Do I want a reader?
+  integer(kind=8), dimension(2) :: ishape, istart, icount
 
   call MPI_INIT(ierr)
   call MPI_COMM_RANK (MPI_COMM_WORLD, my_rank, ierr)
@@ -33,6 +41,26 @@ program main
      stop 'pass arguments so that decomposition in x * y = number of ranks'
   end if
 
+  call adios2_init( adios, MPI_COMM_WORLD, ierr )
+  call adios2_declare_io( ioPut, adios, 'TempWrite', ierr )
+!     !declare hdf5
+  call adios2_set_engine(ioPut, 'HDF5', ierr)
+
+  icount = (/         local_settings%ndx, local_settings%ndy     /)
+  istart = (/ my_rank * local_settings%ndx ,    0  /)
+  ishape = (/ num_ranks* local_settings%ndx,   local_settings%ndy  /)
+
+  !var_temperatures has global shape and local start and count
+  call adios2_define_variable( var_temperatures, ioPut, 'temperatures', &
+                               adios2_type_dp, 2, &
+                               ishape, istart, icount, adios2_constant_dims, &
+                               ierr )
+
+  call adios2_open( bpWriter, ioPut, 'initial_dat.hdf5', adios2_mode_write, &
+                    ierr )
+  call adios2_put( bpWriter, var_temperatures, local_data%Temp, ierr )
+
+  call adios2_close( bpWriter, ierr )
 
   edge_temp = 293.0 !set edges
   ! do more work and write more data
