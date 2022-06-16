@@ -14,7 +14,7 @@ program main
   integer :: ierr, num_ranks, my_rank, &
              k_block_start, k_block_end, k_block_size, &
              t, iter, &
-             num_args, i, itemp
+             num_args, i, j, itemp
 
   ! stuff to run calc
   TYPE(run_settings) :: local_settings
@@ -43,8 +43,9 @@ program main
 
   call adios2_init( adios, MPI_COMM_WORLD, ierr )
   call adios2_declare_io( ioPut, adios, 'TempWrite', ierr )
-!     !declare hdf5
+!     !declare hdf5 engine: try sst at some point? or compare to bp?
   call adios2_set_engine(ioPut, 'HDF5', ierr)
+  ! also set params - threads etc??
 
   icount = (/         local_settings%ndx, local_settings%ndy     /)
   istart = (/ my_rank * local_settings%ndx ,    0  /)
@@ -58,29 +59,42 @@ program main
 
   call adios2_open( bpWriter, ioPut, 'initial_dat.hdf5', adios2_mode_write, &
                     ierr )
+
+  call adios2_begin_step(bpWriter, ierr)
   call adios2_put( bpWriter, var_temperatures, local_data%Temp, ierr )
+  call adios2_end_step(bpWriter, ierr)
 
-  call adios2_close( bpWriter, ierr )
-
-  edge_temp = 293.0 !set edges
+  edge_temp = 4.8 !set edges
   ! do more work and write more data
-  do t = 1, local_settings%steps
+  do t = 1,  local_settings%steps
+
+      call adios2_begin_step(bpWriter, ierr)
 
       if (my_rank .eq. 0) write(0,*) "Step ", t
       ! increase this to do more work/comms per write
-      do iter = 1, local_settings%iterations
+      do iter = 1, 1! local_settings%iterations
 
          ! operator
-         call apply_diffusion(local_settings, local_data)
+         !call apply_diffusion(local_settings, local_data)
          ! mpi
-         call exchange(local_settings, local_data)
+         !call exchange(local_settings, local_data)
          ! BC
          call apply_heat(edge_temp, local_settings, local_data)
-
+         !do i = 0, local_settings%ndx+1
+         !   do j = 0, local_settings%ndy+1
+         !       if( ABS(local_data%Temp(i,j) - edge_temp) .lt. 0.0001) write(0,*) my_rank,i,j,local_data%temp(i,j)
+         !   end do
+         !end do
       end do !iter
 
-      ! Write something
+      ! Write something and increment step
+      call adios2_put( bpWriter, var_temperatures, local_data%Temp, ierr )
+      call adios2_end_step(bpWriter, ierr)
   end do !t
+
+  !delete objects
+
+  call adios2_close( bpWriter, ierr )
 
   call MPI_FINALIZE ( ierr )
 

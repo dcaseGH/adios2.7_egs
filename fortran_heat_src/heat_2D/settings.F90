@@ -13,6 +13,10 @@ type run_settings
     integer :: npx, npy, ndx, ndy, steps, iterations, &
                posx, posy, rank_up, rank_down, rank_left, rank_right, & !mpi stuff
                gndx, gndy! !global x and y dimensions and processor numbers
+
+    ! variable grid
+    ! assume variables are 2d and have same grid for now (x by y) - but need to calculate offsets
+
     ! file names
 
     contains
@@ -38,7 +42,7 @@ Subroutine define_local_settings(self, my_rank)!, num_ranks)
   self%ndx                  = 10 !n points in x
   self%ndy                  = 5
   self%steps                = 10 !steps of sim
-  self%iterations           = 10 !n times apply operator per step
+  self%iterations           = 1 !n times apply operator per step
 
   num_args = command_argument_count()
   allocate(args(num_args))

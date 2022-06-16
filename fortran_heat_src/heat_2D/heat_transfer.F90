@@ -26,14 +26,16 @@ SUBROUTINE apply_diffusion(local_settings, local_data)
 
    integer :: i, j
 
+   local_data%temp_Temp = 0.
+
    do j = 1, local_settings%ndy
       do i = 1, local_settings%ndx
 
-         local_data%temp_Temp(i,j) = (local_data%omega / 4) * ( local_data%temp_Temp(i+1,j) + &
-                                                                local_data%temp_Temp(i-1,j) + &
-                                                                local_data%temp_Temp(i,j+1) + &
-                                                                local_data%temp_Temp(i,j-1) ) &
-                                   + (1. - local_data%omega) *  local_data%temp_Temp(i,j)
+         local_data%temp_Temp(i,j) = (local_data%omega / 4) * ( local_data%temp(i+1,j) + &
+                                                                local_data%temp(i-1,j) + &
+                                                                local_data%temp(i,j+1) + &
+                                                                local_data%temp(i,j-1) ) &
+                                   + (1. - local_data%omega) *  local_data%temp(i,j)
       end do !i
    end do !j
 
@@ -144,22 +146,28 @@ END SUBROUTINE exchange
 SUBROUTINE apply_heat(edge_temp, local_settings, local_data)
 
    ! Apply heat to set edge_temp of the cells outside the interested zone
+   ! Want to find points which are globally on edges, i.e. = or num_ranks *
 
    double precision, intent(in) :: edge_temp
    TYPE(run_settings), intent(IN)    :: local_settings
    TYPE(data_object), intent(INOUT)  :: local_data
 
+   write(0,*) 'apply heat posx ', local_settings%posx, 'posy ',local_settings%posy
    if (local_settings%posx .eq. 0) THEN
+      write(0,*) 'hence (0,:)'
       local_data%Temp(0,:) = edge_temp
    end if
    if (local_settings%posx .eq. (local_settings%npx-1)) THEN
-      local_data%Temp(local_settings%npx-1,:) = edge_temp
+      local_data%Temp(local_settings%ndx+1,:) = edge_temp
+      write(0,*) 'hence (-1,:)'
    end if
    if (local_settings%posy .eq. 0) THEN
       local_data%Temp(:,0) = edge_temp
+      write(0,*) 'hence (:,0)'
    end if
    if (local_settings%posy .eq. (local_settings%npy-1)) THEN
-      local_data%Temp(:,local_settings%npy-1) = edge_temp
+      local_data%Temp(:,local_settings%ndy+1) = edge_temp
+      write(0,*) 'hence (:,-1)'
    end if
 
 END SUBROUTINE apply_heat
