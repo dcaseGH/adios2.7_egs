@@ -95,12 +95,10 @@ SUBROUTINE exchange(local_settings, local_data)
     ! send to left + receive from right
     tag = 1
     if (local_settings% rank_left .ge. 0) THEN
-!       write(0,*) 'send left'
        call MPI_SEND( local_data%Temp(1,:), local_settings%ndy+2, MPI_DOUBLE_PRECISION, local_settings%rank_left, &
                       tag, MPI_COMM_WORLD, ierr )
     end if
     if (local_settings%rank_right .ge. 0) THEN
-!       write(0,*) 'rec  right'
        call MPI_RECV(local_data%Temp(local_settings%ndx+1,:), local_settings%ndy+2 , MPI_DOUBLE_PRECISION, &
                      local_settings%rank_right, &
                      tag, MPI_COMM_WORLD, status, ierr )
@@ -109,13 +107,11 @@ SUBROUTINE exchange(local_settings, local_data)
     ! send to right + receive from left
     tag = 2
     if (local_settings%rank_right .ge. 0) THEN
-!       write(0,*) 'send right'
        call MPI_SEND( local_data%Temp(local_settings%ndx,:), local_settings%ndy+2, MPI_DOUBLE_PRECISION, &
                       local_settings%rank_right, &
                       tag, MPI_COMM_WORLD, ierr )
     end if
     if (local_settings%rank_left .ge. 0) THEN
-!      write(0,*) 'rec  left'
       call MPI_Recv(local_data%Temp(0,:), local_settings%ndy+2, MPI_DOUBLE_PRECISION, &
                      local_settings%rank_left, tag, MPI_COMM_WORLD, status, ierr)
     end if
@@ -123,12 +119,10 @@ SUBROUTINE exchange(local_settings, local_data)
     !send down + receive from above
     tag = 3
     if (local_settings%rank_down .ge. 0) THEN
-       write(0,*) 'send down'
        call MPI_SEND( local_data%Temp(:, 1),                   local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
                       local_settings%rank_down, tag, MPI_COMM_WORLD, ierr)
     end if
     if (local_settings%rank_up .ge. 0) THEN
-       write(0,*) 'rec  up'
        call MPI_Recv(local_data%Temp(:, local_settings%ndy+1), local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
                      local_settings%rank_up, tag, MPI_COMM_WORLD, status, ierr)
     end if
@@ -136,12 +130,10 @@ SUBROUTINE exchange(local_settings, local_data)
     !send up + receive from below
     tag = 4
     if (local_settings%rank_up .ge. 0) THEN
-       write(0,*) 'send up'
        call MPI_SEND( local_data%Temp(:, local_settings%ndy),  local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
                       local_settings%rank_up, tag, MPI_COMM_WORLD, ierr)
     end if
     if (local_settings%rank_down .ge. 0) THEN
-       write(0,*) 'rec  down'
        call MPI_Recv(local_data%Temp(:, 0),                    local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
                      local_settings%rank_down, tag, MPI_COMM_WORLD, status, ierr)
     end if

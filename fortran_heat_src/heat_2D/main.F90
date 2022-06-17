@@ -50,17 +50,18 @@ program main
   ! also set params - threads etc??
 
   !adios variables have global shape and local start and count
-  icount = (/         local_settings%ndx, local_settings%ndy     /)
-  istart = (/ my_rank * local_settings%ndx ,    0  /)
-  ishape = (/ num_ranks* local_settings%ndx,   local_settings%ndy  /)
+  icount = (/ local_settings%ndx                       , local_settings%ndy     /)
+  istart = (/ local_settings%posx * local_settings%ndx , local_settings%posy * local_settings%ndy  /)
+  ishape = (/ local_settings%npx  * local_settings%ndx , local_settings%npy  * local_settings%ndy  /)
   call adios2_define_variable( temperature, ioPut, 'temperatures', &
                                adios2_type_dp, 2, &
                                ishape, istart, icount, adios2_constant_dims, &
                                ierr )
 
-  icount = (/         local_settings%ndx+2, local_settings%ndy +2     /)
-  istart = (/ my_rank * (local_settings%ndx+2) ,    0  /)
-  ishape = (/ num_ranks* (local_settings%ndx +2),   local_settings%ndy +2  /)
+  icount = (/ local_settings%ndx+2                         , local_settings%ndy+2     /)
+  istart = (/ local_settings%posx * (local_settings%ndx+2) , local_settings%posy * (local_settings%ndy+2)  /)
+  ishape = (/ local_settings%npx  * (local_settings%ndx+2) , local_settings%npy  * (local_settings%ndy+2)  /)
+
   call adios2_define_variable( temperature_full, ioPut, 'temperatures_full', &
                                adios2_type_dp, 2, &
                                ishape, istart, icount, adios2_constant_dims, &
@@ -85,7 +86,7 @@ program main
       do iter = 1, 1! local_settings%iterations
 
          ! operator
-         !call apply_diffusion(local_settings, local_data)
+         call apply_diffusion(local_settings, local_data)
 
          ! mpi
          call exchange(local_settings, local_data)
