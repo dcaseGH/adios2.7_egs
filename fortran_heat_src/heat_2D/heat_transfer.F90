@@ -95,11 +95,13 @@ SUBROUTINE exchange(local_settings, local_data)
     ! send to left + receive from right
     tag = 1
     if (local_settings% rank_left .ge. 0) THEN
-       call MPI_SEND( local_data%Temp(:,0), local_settings%ndx+2, MPI_DOUBLE_PRECISION, local_settings%rank_left, &
+!       write(0,*) 'send left'
+       call MPI_SEND( local_data%Temp(1,:), local_settings%ndy+2, MPI_DOUBLE_PRECISION, local_settings%rank_left, &
                       tag, MPI_COMM_WORLD, ierr )
     end if
     if (local_settings%rank_right .ge. 0) THEN
-       call MPI_RECV(local_data%Temp(:,local_settings%ndy+1), local_settings%ndx+2 , MPI_DOUBLE_PRECISION, &
+!       write(0,*) 'rec  right'
+       call MPI_RECV(local_data%Temp(local_settings%ndx+1,:), local_settings%ndy+2 , MPI_DOUBLE_PRECISION, &
                      local_settings%rank_right, &
                      tag, MPI_COMM_WORLD, status, ierr )
     end if
@@ -107,34 +109,40 @@ SUBROUTINE exchange(local_settings, local_data)
     ! send to right + receive from left
     tag = 2
     if (local_settings%rank_right .ge. 0) THEN
-       call MPI_SEND( local_data%Temp(:,local_settings%ndy+1), local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
+!       write(0,*) 'send right'
+       call MPI_SEND( local_data%Temp(local_settings%ndx,:), local_settings%ndy+2, MPI_DOUBLE_PRECISION, &
                       local_settings%rank_right, &
                       tag, MPI_COMM_WORLD, ierr )
     end if
     if (local_settings%rank_left .ge. 0) THEN
-      call MPI_Recv(local_data%Temp(:, 0), local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
+!      write(0,*) 'rec  left'
+      call MPI_Recv(local_data%Temp(0,:), local_settings%ndy+2, MPI_DOUBLE_PRECISION, &
                      local_settings%rank_left, tag, MPI_COMM_WORLD, status, ierr)
     end if
 
     !send down + receive from above
     tag = 3
     if (local_settings%rank_down .ge. 0) THEN
-       call MPI_SEND( local_data%Temp(0, :), local_settings%ndy+2, mpi_vector, &
+       write(0,*) 'send down'
+       call MPI_SEND( local_data%Temp(:, 1),                   local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
                       local_settings%rank_down, tag, MPI_COMM_WORLD, ierr)
     end if
     if (local_settings%rank_up .ge. 0) THEN
-       call MPI_Recv(local_data%Temp(local_settings%ndx+1, :), local_settings%ndy+2, mpi_vector, &
+       write(0,*) 'rec  up'
+       call MPI_Recv(local_data%Temp(:, local_settings%ndy+1), local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
                      local_settings%rank_up, tag, MPI_COMM_WORLD, status, ierr)
     end if
 
     !send up + receive from below
     tag = 4
     if (local_settings%rank_up .ge. 0) THEN
-       call MPI_SEND( local_data%Temp(local_settings%ndx+1, :), local_settings%ndy+2, mpi_vector, &
+       write(0,*) 'send up'
+       call MPI_SEND( local_data%Temp(:, local_settings%ndy),  local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
                       local_settings%rank_up, tag, MPI_COMM_WORLD, ierr)
     end if
     if (local_settings%rank_down .ge. 0) THEN
-       call MPI_Recv(local_data%Temp(0, :), local_settings%ndy+2, mpi_vector, &
+       write(0,*) 'rec  down'
+       call MPI_Recv(local_data%Temp(:, 0),                    local_settings%ndx+2, MPI_DOUBLE_PRECISION, &
                      local_settings%rank_down, tag, MPI_COMM_WORLD, status, ierr)
     end if
 
@@ -146,28 +154,27 @@ END SUBROUTINE exchange
 SUBROUTINE apply_heat(edge_temp, local_settings, local_data)
 
    ! Apply heat to set edge_temp of the cells outside the interested zone
-   ! Want to find points which are globally on edges, i.e. = or num_ranks *
+   ! Want to find points which are globally on edges, i.e. = or num_ranks * ndx + 1
 
    double precision, intent(in) :: edge_temp
    TYPE(run_settings), intent(IN)    :: local_settings
    TYPE(data_object), intent(INOUT)  :: local_data
 
-   write(0,*) 'apply heat posx ', local_settings%posx, 'posy ',local_settings%posy
+   !
    if (local_settings%posx .eq. 0) THEN
-      write(0,*) 'hence (0,:)'
       local_data%Temp(0,:) = edge_temp
    end if
+
    if (local_settings%posx .eq. (local_settings%npx-1)) THEN
       local_data%Temp(local_settings%ndx+1,:) = edge_temp
-      write(0,*) 'hence (-1,:)'
    end if
+
    if (local_settings%posy .eq. 0) THEN
       local_data%Temp(:,0) = edge_temp
-      write(0,*) 'hence (:,0)'
    end if
+
    if (local_settings%posy .eq. (local_settings%npy-1)) THEN
       local_data%Temp(:,local_settings%ndy+1) = edge_temp
-      write(0,*) 'hence (:,-1)'
    end if
 
 END SUBROUTINE apply_heat

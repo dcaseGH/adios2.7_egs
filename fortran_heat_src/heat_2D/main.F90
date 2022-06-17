@@ -24,7 +24,7 @@ program main
   !declare adios variables
   type(adios2_adios) :: adios
   type(adios2_io) :: ioPut, ioGet
-  type(adios2_variable) :: temperature, var_temperatures
+  type(adios2_variable) :: temperature, temperature_full
   type(adios2_engine) :: bpWriter, hdf5Writer!, hdf5Reader !Do I want a reader?
   integer(kind=8), dimension(2) :: ishape, istart, icount
 
@@ -41,18 +41,27 @@ program main
      stop 'pass arguments so that decomposition in x * y = number of ranks'
   end if
 
+  local_data%Temp = dble(my_rank)
+
   call adios2_init( adios, MPI_COMM_WORLD, ierr )
   call adios2_declare_io( ioPut, adios, 'TempWrite', ierr )
 !     !declare hdf5 engine: try sst at some point? or compare to bp?
   call adios2_set_engine(ioPut, 'HDF5', ierr)
   ! also set params - threads etc??
 
+  !adios variables have global shape and local start and count
   icount = (/         local_settings%ndx, local_settings%ndy     /)
   istart = (/ my_rank * local_settings%ndx ,    0  /)
   ishape = (/ num_ranks* local_settings%ndx,   local_settings%ndy  /)
+  call adios2_define_variable( temperature, ioPut, 'temperatures', &
+                               adios2_type_dp, 2, &
+                               ishape, istart, icount, adios2_constant_dims, &
+                               ierr )
 
-  !var_temperatures has global shape and local start and count
-  call adios2_define_variable( var_temperatures, ioPut, 'temperatures', &
+  icount = (/         local_settings%ndx+2, local_settings%ndy +2     /)
+  istart = (/ my_rank * (local_settings%ndx+2) ,    0  /)
+  ishape = (/ num_ranks* (local_settings%ndx +2),   local_settings%ndy +2  /)
+  call adios2_define_variable( temperature_full, ioPut, 'temperatures_full', &
                                adios2_type_dp, 2, &
                                ishape, istart, icount, adios2_constant_dims, &
                                ierr )
@@ -61,7 +70,8 @@ program main
                     ierr )
 
   call adios2_begin_step(bpWriter, ierr)
-  call adios2_put( bpWriter, var_temperatures, local_data%Temp, ierr )
+  call adios2_put( bpWriter, temperature,      local_data%Temp, ierr )
+  call adios2_put( bpWriter, temperature_full, local_data%Temp, ierr )
   call adios2_end_step(bpWriter, ierr)
 
   edge_temp = 4.8 !set edges
@@ -76,19 +86,18 @@ program main
 
          ! operator
          !call apply_diffusion(local_settings, local_data)
+
          ! mpi
-         !call exchange(local_settings, local_data)
+         call exchange(local_settings, local_data)
+
          ! BC
          call apply_heat(edge_temp, local_settings, local_data)
-         !do i = 0, local_settings%ndx+1
-         !   do j = 0, local_settings%ndy+1
-         !       if( ABS(local_data%Temp(i,j) - edge_temp) .lt. 0.0001) write(0,*) my_rank,i,j,local_data%temp(i,j)
-         !   end do
-         !end do
+
       end do !iter
 
       ! Write something and increment step
-      call adios2_put( bpWriter, var_temperatures, local_data%Temp, ierr )
+      call adios2_put( bpWriter, temperature, local_data%Temp, ierr )
+      call adios2_put( bpWriter, temperature_full, local_data%Temp, ierr )
       call adios2_end_step(bpWriter, ierr)
   end do !t
 
