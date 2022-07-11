@@ -7,10 +7,11 @@ IMPLICIT NONE
 
 PRIVATE
 
-PUBLIC data_object, apply_diffusion, initialise, exchange, apply_heat
+PUBLIC data_object, apply_diffusion, initialise, clear_data, exchange, apply_heat, apply_column_addition
 
 TYPE data_object
   double precision, Allocatable, Dimension(:,:) :: Temp, temp_Temp
+  double precision, Allocatable, Dimension(:,:,:) :: field_3d
   double precision :: omega
 
 end type data_object
@@ -43,6 +44,19 @@ SUBROUTINE apply_diffusion(local_settings, local_data)
 
 END SUBROUTINE apply_diffusion
 
+SUBROUTINE clear_data(local_data)
+
+   !clear data arrays
+   TYPE(data_object), intent(INOUT)  :: local_data
+
+   DEALLOCATE(local_data%Temp)
+   DEALLOCATE(local_data%temp_Temp)
+
+   !3d
+   DEALLOCATE(local_data%field_3d)
+
+END SUBROUTINE clear_data
+
 SUBROUTINE initialise(local_settings, local_data)
 
    ! just invent some data
@@ -55,9 +69,14 @@ SUBROUTINE initialise(local_settings, local_data)
 
    local_data%omega = 0.8 !because it needs to be something...
 
+   !2d
    ALLOCATE(local_data%Temp(0:local_settings%ndx+1,0:local_settings%ndy+1))
    ALLOCATE(local_data%temp_Temp(0:local_settings%ndx+1,0:local_settings%ndy+1))
 
+   !3d
+   ALLOCATE(local_data%field_3d(local_settings%ndx, local_settings%ndy, local_settings%ndz))
+
+   !2d
    local_data%temp      = 0.
    local_data%temp_Temp = 0.
 
@@ -75,6 +94,9 @@ SUBROUTINE initialise(local_settings, local_data)
                               - sin(2 * y) + sin(y)
       end do
    end do
+
+   !3D
+   local_data%field_3d = 4.2
 
 END SUBROUTINE initialise
 
@@ -142,6 +164,21 @@ SUBROUTINE exchange(local_settings, local_data)
 
 
 END SUBROUTINE exchange
+
+SUBROUTINE apply_column_addition(local_settings, local_data)
+
+   ! Add something to the 3D field
+   ! Add more to higher points
+
+   TYPE(run_settings), intent(IN)    :: local_settings
+   TYPE(data_object), intent(INOUT)  :: local_data
+   Integer :: i
+
+   do i=1, local_settings%ndz
+      local_data%field_3d(:,:,i) = local_data%field_3d(:,:,i) + DBLE(i) / 10.00
+   end do
+
+END SUBROUTINE apply_column_addition
 
 SUBROUTINE apply_heat(edge_temp, local_settings, local_data)
 

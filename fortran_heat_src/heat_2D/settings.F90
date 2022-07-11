@@ -10,12 +10,13 @@ PUBLIC run_settings!, define_local_settings
 type run_settings
     !npx y number processors
     ! ndx y size local dimension
-    integer :: npx, npy, ndx, ndy, steps, iterations, &
-               posx, posy, rank_up, rank_down, rank_left, rank_right, & !mpi stuff
-               gndx, gndy! !global x and y dimensions and processor numbers
+    integer :: npx, npy, npz, ndx, ndy, ndz, steps, iterations, &
+               posx, posy, posz, rank_up, rank_down, rank_left, rank_right, & !mpi stuff
+               gndx, gndy, gndz !global x and y dimensions and processor numbers
 
     ! variable grid
     ! assume variables are 2d and have same grid for now (x by y) - but need to calculate offsets
+    ! now add 3d vars - but mpi distribution still only in x and y
 
     ! file names
 
@@ -41,6 +42,7 @@ Subroutine define_local_settings(self, my_rank)!, num_ranks)
 
   self%ndx                  = 10 !n points in x
   self%ndy                  = 5
+  self%ndz                  = 12
   self%steps                = 10 !steps of sim
   self%iterations           = 1 !n times apply operator per step
 
@@ -55,13 +57,16 @@ Subroutine define_local_settings(self, my_rank)!, num_ranks)
   self%npx       = itemp
   read( args(2), '(i6)' ) itemp
   self%npy       = itemp
+  self%npz       = 1 ! do not split along z
 
 
   !calculate global array size and the local offsets in that global space
-  self%gndx = self%npx * self%ndx;
-  self%gndy = self%npy * self%ndy;
+  self%gndx = self%npx * self%ndx
+  self%gndy = self%npy * self%ndy
+  self%gndz = self%npz * self%ndz
   self%posx = MODULO(my_rank,  self%npx)
   self%posy = my_rank / self%npx
+  self%posz = 1
 
   ! determine neighbours
   if (self%posy .eq. 0) THEN
@@ -88,8 +93,6 @@ Subroutine define_local_settings(self, my_rank)!, num_ranks)
       self%rank_right = my_rank + 1
   end if
 
-  !write(0,*) "defining ranks ", my_rank, self%posx, self%posy, self%npx, self%npy, &
-  !                    self%rank_up,self%rank_down,self%rank_left,self%rank_right
 
 End Subroutine define_local_settings
 

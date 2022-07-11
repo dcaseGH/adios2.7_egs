@@ -7,14 +7,15 @@ program main
   use mpi
   use adios2
   use settings, only : run_settings!, define_local_settings
-  use heat_transfer, only : data_object, apply_diffusion, exchange, initialise, apply_heat
+  use heat_transfer, only : data_object, apply_diffusion, exchange, initialise, &
+                            clear_data, apply_heat, apply_column_addition
 
   implicit none
 
   integer :: ierr, num_ranks, my_rank, &
-             k_block_start, k_block_end, k_block_size, &
              t, iter, &
-             num_args, i, j, itemp
+             num_args, i, j, k, itemp
+!             k_block_start, k_block_end, k_block_size, &
 
   ! stuff to run calc
   TYPE(run_settings) :: local_settings
@@ -24,13 +25,16 @@ program main
   !declare adios variables
   type(adios2_adios) :: adios
   type(adios2_io) :: ioPut, ioGet
-  type(adios2_variable) :: temperature, temperature_full
+  type(adios2_variable) :: temperature, temperature_full, var_3d
   type(adios2_engine) :: bpWriter, hdf5Writer!, hdf5Reader !Do I want a reader?
   integer(kind=8), dimension(2) :: ishape, istart, icount
+  integer(kind=8), dimension(3) :: ijkshape, ijkstart, ijkcount
+
 
   call MPI_INIT(ierr)
   call MPI_COMM_RANK (MPI_COMM_WORLD, my_rank, ierr)
   call MPI_COMM_SIZE (MPI_COMM_WORLD, num_ranks, ierr)
+  if (my_rank .eq. 0)  write(0,*) 'Running an ADIOS2 miniapp - eg command mpirun -np 2 [exe] 1 2'
 
   write(0,*) "Running with rank ", my_rank, " of ", num_ranks
   call local_settings%define_local_settings(my_rank)
@@ -44,6 +48,7 @@ program main
   local_data%Temp = dble(my_rank)
 
   call adios2_init( adios, MPI_COMM_WORLD, ierr )
+!  call adios2_init( adios, 'example.xml', MPI_COMM_WORLD, ierr )
   call adios2_declare_io( ioPut, adios, 'TempWrite', ierr )
 !     !declare hdf5 engine: try sst at some point? or compare to bp?
   call adios2_set_engine(ioPut, 'HDF5', ierr)
@@ -67,12 +72,25 @@ program main
                                ishape, istart, icount, adios2_constant_dims, &
                                ierr )
 
+!  ijkcount = (/ local_settings%npx  * local_settings%ndx,  local_settings%npy  *local_settings%ndy, &
+!                local_settings%npz  * local_settings%ndz /)
+  ijkcount = (/ local_settings%ndx, local_settings%ndy, local_settings%ndz /)
+  ijkstart = (/ local_settings%posx * local_settings%ndx , local_settings%posy * local_settings%ndy, 0  /)
+  ijkshape = (/ local_settings%npx  * local_settings%ndx , local_settings%npy  * local_settings%ndy, &
+                local_settings%npz  * local_settings%ndz  /)
+
+  call adios2_define_variable( var_3d, ioPut, 'something_3d', &
+                               adios2_type_dp, 3, &
+                               ijkshape, ijkstart, ijkcount, adios2_constant_dims, &
+                               ierr )
+
   call adios2_open( bpWriter, ioPut, 'initial_dat.hdf5', adios2_mode_write, &
                     ierr )
 
   call adios2_begin_step(bpWriter, ierr)
-  call adios2_put( bpWriter, temperature,      local_data%Temp, ierr )
-  call adios2_put( bpWriter, temperature_full, local_data%Temp, ierr )
+  call adios2_put( bpWriter, temperature,      local_data%Temp,     ierr )
+  call adios2_put( bpWriter, temperature_full, local_data%Temp,     ierr )
+  call adios2_put( bpWriter, var_3d,           local_data%field_3d, ierr )
   call adios2_end_step(bpWriter, ierr)
 
   edge_temp = 4.8 !set edges
@@ -85,8 +103,12 @@ program main
       ! increase this to do more work/comms per write
       do iter = 1, 1! local_settings%iterations
 
-         ! operator
+         ! operators
+         ! 2D
          call apply_diffusion(local_settings, local_data)
+
+         ! 3D
+         call apply_column_addition(local_settings, local_data)
 
          ! mpi
          call exchange(local_settings, local_data)
@@ -99,10 +121,12 @@ program main
       ! Write something and increment step
       call adios2_put( bpWriter, temperature, local_data%Temp, ierr )
       call adios2_put( bpWriter, temperature_full, local_data%Temp, ierr )
+      call adios2_put( bpWriter, var_3d, local_data%field_3d, ierr )
       call adios2_end_step(bpWriter, ierr)
   end do !t
 
   !delete objects
+  call clear_data(local_data)
 
   call adios2_close( bpWriter, ierr )
 
